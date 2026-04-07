@@ -35,13 +35,16 @@ window.addToCart = (upc) => {
     if (!product) return;
     
     const existing = cart.find(item => item.upc === upc);
+    // Pastikan harga diambil dari harga_coret_april dan dikonversi ke angka
+    const hargaFix = parseInt(product.harga_coret_april) || 0;
+
     if (existing) {
         existing.qty += 1;
     } else {
         cart.push({
             upc: product.upc,
             nama: product.product_title,
-            harga: product.harga_coret_april,
+            harga: hargaFix,
             qty: 1
         });
     }
@@ -68,7 +71,6 @@ function saveCart() {
 }
 
 function updateCartUI() {
-    // Update Badge
     const totalItems = cart.reduce((sum, item) => sum + item.qty, 0);
     if (totalItems > 0) {
         DOM.cartBadge.textContent = totalItems;
@@ -77,7 +79,6 @@ function updateCartUI() {
         DOM.cartBadge.classList.add('hidden');
     }
 
-    // Update List
     if (cart.length === 0) {
         DOM.cartList.innerHTML = `<p class="text-slate-500 text-center py-10">Keranjang masih kosong...</p>`;
         DOM.cartTotal.textContent = "Rp 0";
@@ -86,7 +87,7 @@ function updateCartUI() {
 
     let totalHarga = 0;
     DOM.cartList.innerHTML = cart.map(item => {
-        totalHarga += item.harga * item.qty;
+        totalHarga += (item.harga * item.qty);
         return `
             <div class="flex items-center justify-between bg-slate-900/50 p-4 rounded-2xl border border-slate-800">
                 <div class="flex-grow">
@@ -108,7 +109,7 @@ window.checkoutWA = () => {
     if (cart.length === 0) return alert("Keranjang masih kosong!");
     let totalHarga = 0;
     let listPesan = cart.map(item => {
-        totalHarga += item.harga * item.qty;
+        totalHarga += (item.harga * item.qty);
         return `- ${item.nama} (${item.qty}x)`;
     }).join('\n');
     
@@ -116,17 +117,12 @@ window.checkoutWA = () => {
     window.open(`https://wa.me/6285393620791?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
-// LOGIKA FILTER & RENDER (TETAP SAMA)
 function setupMenu() {
     let cats = [...new Set(rawData.map(p => {
         let c = p.category ? p.category.trim() : 'Lainnya';
-        return c.charAt(0).toUpperCase() + c.slice(1).toLowerCase();
+        return c.split('&')[0].trim(); // Menyederhanakan kategori
     }))];
-    cats.sort((a, b) => {
-        if (a.toUpperCase() === 'SOFA') return -1;
-        if (b.toUpperCase() === 'SOFA') return 1;
-        return a.localeCompare(b);
-    });
+    cats.sort();
     const finalCats = ['Semua Kategori', ...cats];
     DOM.catSel.innerHTML = finalCats.map(c => `<option value="${c === 'Semua Kategori' ? 'ALL' : c}">${c}</option>`).join('');
     DOM.catMob.innerHTML = finalCats.map(c => `<button onclick="selectCat('${c === 'Semua Kategori' ? 'ALL' : c}')" class="text-left py-4 px-6 rounded-2xl bg-slate-900 border border-slate-800 text-sm font-semibold hover:border-cyan-400 transition-all">${c}</button>`).join('');
@@ -142,15 +138,20 @@ function handleFilter() {
     
     let results = rawData.filter(p => {
         const str = `${p.product_title} ${p.brand} ${p.category} ${p.upc}`.toLowerCase();
-        return str.includes(keyword) && (cat === 'ALL' || (p.category && p.category.trim().toLowerCase() === cat.toLowerCase()));
+        const matchKeyword = str.includes(keyword);
+        const matchCat = (cat === 'ALL' || (p.category && p.category.toLowerCase().includes(cat.toLowerCase())));
+        return matchKeyword && matchCat;
     });
 
     results.sort((a, b) => {
         const sA = (a.status || '').toUpperCase() === 'ACTIVE' ? 1 : 0;
         const sB = (b.status || '').toUpperCase() === 'ACTIVE' ? 1 : 0;
         if (sA !== sB) return sB - sA;
-        if (sortType === 'LOW') return a.harga_coret_april - b.harga_coret_april;
-        if (sortType === 'HIGH') return b.harga_coret_april - a.harga_coret_april;
+
+        const hA = parseInt(a.harga_coret_april) || 0;
+        const hB = parseInt(b.harga_coret_april) || 0;
+        if (sortType === 'LOW') return hA - hB;
+        if (sortType === 'HIGH') return hB - hA;
         return 0;
     });
 
@@ -164,6 +165,7 @@ function render() {
     document.getElementById('loadingState').classList.add('hidden');
     const toShow = filteredData.slice(0, displayCount);
     DOM.grid.innerHTML = toShow.map((p, i) => window.UI.createProductCard(p, i)).join('');
+    
     if (toShow.length === 0) {
         DOM.grid.classList.add('hidden');
         document.getElementById('emptyState').classList.remove('hidden');
