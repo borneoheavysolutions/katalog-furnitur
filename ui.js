@@ -1,44 +1,76 @@
 window.UI = {
-    formatRupiah: (n) => !n || isNaN(n) ? "Rp 0" : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n),
+    formatRupiah: (n) => {
+        const val = parseInt(n);
+        return isNaN(val) ? "Rp 0" : new Intl.NumberFormat('id-ID', { 
+            style: 'currency', 
+            currency: 'IDR', 
+            minimumFractionDigits: 0 
+        }).format(val);
+    },
 
     getCDN: (url) => {
         if (!url) return 'https://via.placeholder.com/400';
-        let clean = url.replace(/['"]/g, '').trim();
+        // Membersihkan karakter aneh dari hasil scraping
+        let clean = url.replace(/['"\s]/g, '').trim();
+        
+        // Transformasi ke URL Media Dekoruma untuk optimasi gambar
         if (clean.includes('amazonaws.com')) {
-            clean = clean.replace('f1-static.s3-ap-southeast-1.amazonaws.com', 'media.dekoruma.com') + "?auto=webp&width=800";
+            clean = clean.replace('f1-static.s3-ap-southeast-1.amazonaws.com', 'media.dekoruma.com');
+            // Menambahkan parameter auto-format webp
+            if (!clean.includes('?')) clean += "?auto=webp&width=800";
         }
         return clean;
     },
 
     openGallery: (imageString) => {
+        if (!imageString) return;
         const modal = document.getElementById('galleryModal');
         const container = document.getElementById('swipeContainer');
-        const images = imageString.split('|').filter(img => img.trim() !== '');
-        container.innerHTML = images.map(img => `<div class="swipe-item"><img src="${window.UI.getCDN(img)}" class="shadow-2xl"></div>`).join('');
-        modal.classList.remove('hidden'); modal.classList.add('flex'); document.body.style.overflow = 'hidden';
+        
+        // Memecah banyak link gambar
+        const images = imageString.split('|').map(img => img.trim()).filter(img => img !== '');
+        
+        container.innerHTML = images.map(img => `
+            <div class="swipe-item">
+                <img src="${window.UI.getCDN(img)}" class="shadow-2xl rounded-3xl max-h-[70vh] object-contain">
+            </div>
+        `).join('');
+        
+        modal.classList.remove('hidden'); 
+        modal.classList.add('flex'); 
+        document.body.style.overflow = 'hidden';
     },
 
     createProductCard: (p, i) => {
         if (!p) return '';
+        
+        // Menggunakan UPC hasil sinkronisasi (mungkin ada -1, -2 dst)
         const upc = p.upc || 'N/A';
         const rawImgs = p.image_url || '';
-        const cleanImgs = rawImgs.split('|').filter(img => img.trim() !== '');
-        const cover = window.UI.getCDN(cleanImgs[0]);
         
-        const hNormal = parseFloat(p.harga_normal) || 0;
-        const hJual = parseFloat(p.harga_coret_april) || 0;
+        // Mengambil Gambar Pertama sebagai Cover
+        const imgArray = rawImgs.split('|').map(s => s.trim()).filter(s => s !== '');
+        const cover = window.UI.getCDN(imgArray[0]);
+        
+        // Parsing Harga ke Integer
+        const hNormal = parseInt(p.harga_normal) || 0;
+        const hJual = parseInt(p.harga_coret_april) || 0;
 
-        // Logika Badge Diskon
+        // Badge Diskon
         let diskonBadge = '';
-        if (hNormal > hJual) {
+        if (hNormal > hJual && hNormal > 0) {
             const persen = Math.round(((hNormal - hJual) / hNormal) * 100);
-            diskonBadge = `<div class="absolute top-4 right-4 z-20 bg-cyan-500 text-slate-950 font-black px-2.5 py-1 rounded-lg text-[11px] shadow-lg">-${persen}%</div>`;
+            if (persen > 0) {
+                diskonBadge = `<div class="absolute top-4 right-4 z-20 bg-cyan-500 text-slate-950 font-black px-2.5 py-1 rounded-lg text-[11px] shadow-lg">-${persen}%</div>`;
+            }
         }
 
+        // Cek Status (Harus Case-Insensitive)
         const isDiscontinued = (p.status || '').toUpperCase() !== 'ACTIVE';
         const cardClass = isDiscontinued ? 'opacity-40 grayscale pointer-events-none' : 'card-animate';
-        const statusBadge = isDiscontinued ? `<div class="absolute top-4 left-4 z-20 bg-black/80 text-white border border-red-500/50 px-3 py-1 rounded-lg text-[9px] font-black uppercase">Produk ini discontinue</div>` : '';
+        const statusBadge = isDiscontinued ? `<div class="absolute top-4 left-4 z-20 bg-black/80 text-white border border-red-500/50 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-tighter">Discontinued</div>` : '';
 
+        // Dimensi Produk
         const dim = (p.panjang_cm || p.lebar_cm || p.tinggi_cm) 
             ? `<div class="flex gap-3 text-[10px] text-slate-500 font-bold border-t border-white/5 pt-3 mb-4">
                 <span>P: ${p.panjang_cm || 0}</span> <span>L: ${p.lebar_cm || 0}</span> <span>T: ${p.tinggi_cm || 0}</span>
@@ -49,14 +81,14 @@ window.UI = {
                 ${statusBadge}
                 ${diskonBadge}
                 
-                <div onclick="window.UI.openGallery('${rawImgs}')" class="aspect-square w-full rounded-[2rem] overflow-hidden bg-slate-800/50 relative cursor-zoom-in group">
-                    <img src="${cover}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110">
+                <div onclick="window.UI.openGallery('${rawImgs.replace(/'/g, "\\'")}')" class="aspect-square w-full rounded-[2rem] overflow-hidden bg-slate-800/50 relative cursor-zoom-in group">
+                    <img src="${cover}" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy">
                 </div>
 
                 <div class="mt-6 flex-grow">
                     <div class="flex justify-between items-start mb-2">
-                        <p class="text-[9px] text-cyan-400 font-bold uppercase tracking-widest">${p.brand || '-'}</p>
-                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest">${p.category || '-'}</p>
+                        <p class="text-[9px] text-cyan-400 font-bold uppercase tracking-widest">${p.brand || 'DEKORUMA'}</p>
+                        <p class="text-[9px] text-slate-500 font-bold uppercase tracking-widest line-clamp-1 ml-2">${p.category || 'Furniture'}</p>
                     </div>
                     <h3 class="text-md font-bold text-white leading-tight mb-4 line-clamp-2">${p.product_title || 'Furniture Unit'}</h3>
                     ${dim}
@@ -77,4 +109,7 @@ window.UI = {
     }
 };
 
-window.closeGallery = () => { document.getElementById('galleryModal').classList.add('hidden'); document.body.style.overflow = 'auto'; };
+window.closeGallery = () => { 
+    document.getElementById('galleryModal').classList.add('hidden'); 
+    document.body.style.overflow = 'auto'; 
+};
